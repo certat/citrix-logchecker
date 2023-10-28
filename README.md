@@ -1,6 +1,8 @@
 # citrix-logchecker
 Parse citrix netscaler logs to check for signs of CVE-2023-4966 exploitation
 
+Written by Otmar Lendl.
+
 # Usage:
 
         ./citrix-anomaly.pl [-d] [-v] [-h] [-p file] [-a X] [logfiles]

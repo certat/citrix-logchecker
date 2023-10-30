@@ -21,6 +21,14 @@ Written by Otmar Lendl.
                         p aggregate to routing table prefix
                 -p path to a routing table dump. Syntax: "prefix asn" per line
 
+# Requirements
+
+The script needs Net::CIDR and Net::Patricia which might not be installed on a base Linux server. On Debian-bases systems, use
+  sudo apt install libnet-cidr-perl libnet-patricia-perl
+to install them.
+
+A file with the global routing table as of 2023-10-27 is included in this repo. It needs to be decompressed.
+
 # Background and Algorithm
 
 CVE-2023-4966 leaks session cookies which allows attackers to reconnect to existing Citrix sessions.

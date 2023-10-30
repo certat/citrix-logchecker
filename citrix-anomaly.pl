@@ -57,8 +57,9 @@ die 'Aggregation algorithms "a" and "p" require a prefix file (-p)' if (($agg_al
 if (defined($prefix_file)) {
 	die "Give a valid filename for -p\n" unless ($prefix_file =~ /^[\w_.\/-]+$/ and -f $prefix_file);
 
-	use Net::CIDR ':all';
-	use Net::Patricia;
+	# load them only of we need to read the prefix file.
+	require Net::CIDR;
+	require Net::Patricia;
 
 	$cidrtree = new Net::Patricia;
 
@@ -91,6 +92,7 @@ my %nologin;
 my %good_sources;
 
 my %p1;
+my ($day, $lastday, $logins, $stats) = (0,0,0,0,0);
 while(<>) {
 	chomp;
 
@@ -113,11 +115,14 @@ while(<>) {
 	
 	}x) {
 		%p1 = %+;
+		$day = substr($p1{ts1},0,6);
 
 		if ($p1{feature} eq 'SSLVPN' and $p1{message} eq 'LOGIN') {
 			handle_sslvpn_login(\%p1);
+			$logins++;
 		} elsif ($p1{feature} eq 'SSLVPN' and $p1{message} eq 'TCPCONNSTAT') {
 			handle_sslvpn_tcpconnstat(\%p1);
+			$stats++;
 		} else {
 			print "Not processing $p1{feature} /  $p1{message}\n" if ($verbose);
 		}
@@ -133,30 +138,55 @@ while(<>) {
 		next;
 	}
 
+	if ($day ne $lastday) {
+		printf STDERR "%6s: Logins: %3d, TCPstats: %5d, Roaming Reconnects: %3d\n", $day, $logins, $stats, scalar(keys(%suspect));
+	}
+	$lastday = $day;
 }
 
 print STDERR "\n";
 
 clear_suspect();
 
-if ($verbose) {
-	print "\n\n";
-	print "Aggregated Login statistics: ", Dumper(\%good_sources);
-	print "\n\n";
-	print "Cleared reconnect SessionIDs: ", Dumper(\%cleared);
-	print "\n\n";
-	foreach my $s (keys %cleared) {
-		print "Cleared Session $s: \n", Dumper($sessions{$s}), "\n";
-	}
+
+sub print_session {
+	my $s = $_[0];
+
+	print "\tSession $s: \n";
+	printf "\t\t%s: %15s -> %15s (%s -> %s)\n", $sessions{$s}->{tcpstats}->{ts1}, $sessions{$s}->{loginip}, $sessions{$s}->{logoutip},
+		$sessions{$s}->{loginagg}, $sessions{$s}->{logoutagg};
+
 }
 
-print "Connection-Stats without Login from: ", Dumper(\%nologin);
-print "\n\n";
-print "Suspect SessionIDs: ", Dumper(\%suspect);
-print "\n\n";
+my %state = ();
 
+print "\nSummary:\n========\n\n";
+print "** Number of connection-stats without matching logins: ", scalar(keys(%nologin)), "\n";
+foreach my $s (keys %nologin) {
+	print_session($s);
+	$state{nologin}->{$s} = $sessions{$s};
+}
+
+print "\n** Number of sessions with reconnects from suspicious sources: ", scalar(keys(%suspect)), "\n";
 foreach my $s (keys %suspect) {
-	print "Suspect Session $s: \n", Dumper($sessions{$s}), "\n";
+	print_session($s);
+	$state{suspicious}->{$s} = $sessions{$s};
+}
+
+if ($verbose) {
+	print "\n** Number of reconnects from cleared sources: ", scalar(keys(%cleared)), "\n";
+	foreach my $s (keys %cleared) {
+		print_session($s);
+		$state{cleared}->{$s} = $sessions{$s};
+	}
+
+	print "\n** User logins per aggregate\n";
+	foreach my $a (keys %good_sources) {
+		print "\t$a\n\t\t", join("\n\t\t", keys(%{$good_sources{$a}})),"\n";
+	}
+
+	print "\n\nFull state:\n", Dumper(\%state);
+
 }
 
 #
@@ -186,14 +216,17 @@ sub handle_sslvpn_login {
 		my %full = (%$h1, %+);
 		delete($full{rest});
 		print "got match: ", Dumper(\%full), "\n" if ($debug);
+
+		my $id = $full{sessionid} . "-" . $full{context};
 	
-		if (defined($sessions{$full{sessionid}})) {
-			print STDERR "Session $sessions{$full{sessionid}} already exists.\n";
+		if (defined($sessions{$id})) {
+			print STDERR "Session $sessions{$id} already exists.\n";
 		}
 
-		$sessions{$full{sessionid}}->{login} = \%full;
-		$sessions{$full{sessionid}}->{loginip} = $full{clientip};
-		print STDERR "L";
+		$sessions{$id}->{login} = \%full;
+		$sessions{$id}->{loginip} = $full{clientip};
+		$sessions{$id}->{loginagg} = ip_aggregate($full{clientip});
+#		print STDERR "L";
 
 		my $aggr = ip_aggregate($full{clientip});
 		$good_sources{$aggr}->{$full{user}}++;
@@ -236,28 +269,38 @@ sub handle_sslvpn_tcpconnstat {
 		delete($full{rest});
 		print "got match: ", Dumper(\%full), "\n" if ($debug);
 
-		my $sessionid = $full{sessionid};
-		my $source = $full{source}; $source =~ s/:\d+$//;	# don't care about port
-
-		unless (defined($sessionid) and ($sessionid =~ /^\d+$/)) {
+		unless (defined($full{sessionid}) and (defined($full{context}))) {
 			print STDERR "TCPSTATS without a sessionid.\n", Dumper(\%full), "\n";
 			return;
 		}
-		unless (defined($sessions{$sessionid})) {
-			print STDERR "TCPSTATS for $sessionid that doesn't exist. Client = $source\n" if ($verbose);
-			$nologin{$source}->{$full{user}}++;
+
+		my $id = $full{sessionid} . "-" . $full{context};
+		my $source = $full{source}; $source =~ s/:\d+$//;	# don't care about port
+
+		unless (defined($sessions{$id}) and defined($sessions{$id}->{login})) {
+			print STDERR "TCPSTATS for $id that didn't login. Client = $source\n" if ($verbose);
+			$nologin{$id}->{$full{user}}++;
+			$sessions{$id}->{logoutip} = $source;
+			$sessions{$id}->{logoutagg} = ip_aggregate($source);
+			$sessions{$id}->{tcpstats} = \%full;
+
+# fake login data
+			$sessions{$id}->{loginip} = $full{clientip};
+			$sessions{$id}->{loginagg} = ip_aggregate($full{clientip});
+			
 			return;
 		}
 
-		my $loginip = $sessions{$sessionid}->{loginip};
+		my $loginip = $sessions{$id}->{loginip};
 
 		if ($source eq $loginip) {			# no change in client IP
-			print STDERR "s";
+#			print STDERR "s";
 		} else {
-			print STDERR "R";
-			$sessions{$sessionid}->{logoutip} = $source;
-			$sessions{$sessionid}->{tcpstats} = \%full;
-			$suspect{$sessionid}++;
+#			print STDERR "R";
+			$sessions{$id}->{logoutip} = $source;
+			$sessions{$id}->{logoutagg} = ip_aggregate($source);
+			$sessions{$id}->{tcpstats} = \%full;
+			$suspect{$id}++;
 		}
 	}
 }
@@ -290,7 +333,7 @@ sub clear_suspect {
 		}
 	}
 
-	print "clear_suspect: Looked at ", scalar(@sus_ids), ". Now ", scalar(keys %cleared), " sessions cleared, ",
+	print "clear_suspect: Initially ", scalar(@sus_ids), " suspect sessions. ", scalar(keys %cleared), " sessions cleared, ",
 			scalar(keys %suspect), " sessions still suspect.\n";
 
 }

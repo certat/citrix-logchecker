@@ -23,13 +23,16 @@ Written by Otmar Lendl.
 
 # Requirements
 
-The script needs Net::CIDR and Net::Patricia which might not be installed on all Linux servers. On Debian-based systems, use
+The script needs Net::CIDR and Net::Patricia (you want to use the -p feature) which might not be installed on all Linux servers. On Debian-based systems, use
 
         sudo apt install libnet-cidr-perl libnet-patricia-perl
 
 to install them.
 
 A file with the global routing table as of 2023-10-27 is included in this repo. It needs to be decompressed.
+
+The logline prefixes can vary between different systems / log daemons.
+You might need to adapt the code at line ~110, by commenting / uncommenting adapting the patterns for timestamps.
 
 # Background and Algorithm
 

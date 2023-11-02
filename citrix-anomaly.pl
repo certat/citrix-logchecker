@@ -107,12 +107,15 @@ while(<>) {
 # Oct  1 06:02:44 netscaler 10/01/2023:06:02:44  C-SYS-F2-003 0-PPE-4 : default SSLVPN LOGIN 104413247 0 : Context user@example.com@a.b.c.d - SessionId: 34921 - User user@example.com - Client_ip a.b.c.d - Nat_ip "Mapped Ip" - Vserver a.b.c.d:443 - Browser_type "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36" - SSLVPN_client_type ICA - Group(s) "N/A"
 # or
 # 2023-08-01T00:14:15.285005+00:00 172.17.7.7  2023/08/01:00:14:15 GMT mpx2 0-PPE-1 : default SSLVPN LOGIN 18219290 0 : Context random.loser@a.b.c.d - SessionId: 11364 - User random.loser - Client_ip a.b.c.d - Nat_ip "Mapped Ip" - Vserver a.b.c.d:443 - Browser_type "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safa" - SSLVPN_client_type ICA - Group(s) "PORTAL"
+# or
+# Nov  2 05:31:28 <local0.info> 10.68.166.19  11/02/2023:04:31:28 GMT EXT 0-PPE-0 : default SSLVPN LOGIN 4913897 0 : Context user@ip - SessionId: 21066 - User user- Client_ip 1.2.3.4 - Nat_ip "Mapped Ip" - Vserver 5.6.7.8:443 - Browser_type "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36" - SSLVPN_client_type ICA - Group(s) "N/A"
 
 	if ( m{^
 		(?<ts1>\w\w\w\s\s?\d?\d\s\d\d:\d\d:\d\d)\s	# first timestamp if like "Oct  1 06:02:44" (default Linux syslog)
 #		(?<ts1>^\S+)\s 					# alternatively, if timestamp like  "2023-08-01T00:14:15.285005+00:00"
+#		(?<loglevel>[<>\w.]+)\s				# uncomment if line includes <local0.info> or similar
 		(?<hostname>[\w.-]+)\s+				# 
-		(?<ts2>\d\d/\d\d/\d\d\d\d:\d\d:\d\d:\d\d)\s+	# second timestamp if US-timeformat w/o timezone (e.g. "10/01/2023:06:02:44 "
+		(?<ts2>\d\d/\d\d/\d\d\d\d:\d\d:\d\d:\d\d\s(GMT)?)\s	# second timestamp if US-timeformat w or w/o timezone (e.g. "10/01/2023:06:02:44 "
 #		(?<ts2>\d\d\d\d/\d\d/\d\d:\d\d:\d\d:\d\d)\sGMT\s# alternatively, if "YYYY/MM/DD:hh:mm:ss GMT" (e.g. "2023/08/01:00:14:15 GMT")
 		(?<code1>[\w-]+)\s				# e.g. C-SYS-F2-003
 		(?<code2>[\w-]+)\s				# e.g. 0-PPE-4

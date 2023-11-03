@@ -31,8 +31,8 @@ to install them.
 
 A file with the global routing table as of 2023-10-27 is included in this repo. It needs to be decompressed.
 
-The logline prefixes can vary between different systems / log daemons.
-You might need to adapt the code at line ~110, by commenting / uncommenting adapting the patterns for timestamps.
+The logline prefixes can vary between different systems / log daemons. The code now tries to ignore
+line prefixes and matches on the Citrix supplied timestamps. (which apparently can vary by locale settings.)
 
 # Background and Algorithm
 
